@@ -3,6 +3,7 @@
 
 //definizione strutture
 struct Request{
+  pid_t processID;
   char id [100];
   char servizio [10];
 };
