@@ -23,7 +23,7 @@ int main (int argc, char *argv[]) {
     printf("<Client %d> Making a FIFO...\n", getpid());
     //creazione clientFIFO
     if (mkfifo(pathToClientFIFO, S_IRUSR | S_IWUSR | S_IWGRP) == -1)
-      errExit("mkdir failed");
+      errExit("mkfifo failed");
     printf("<Client %d>clientFIFO creata con successo\n", getpid());
     //apertura serverFIFO
     int serverFIFO = open(pathToServerFIFO, O_WRONLY);
@@ -55,8 +55,11 @@ int main (int argc, char *argv[]) {
       errExit("read failed");
     printf("<Client %d>Lettura eseguita con successo...\n", getpid());
     printf("Chiave rilasciata dal server: %i\n", response.key);
-    close(clientFIFO);
-    unlink(pathToClientFIFO);
+    if (close(serverFIFO) != 0 || close(clientFIFO) != 0) {
+      errExit("close failed");
+    }
+    if(unlink(pathToClientFIFO) != 0)
+      errExit("unlink failed");
     //...fine scrittura
     return 0;
 }
