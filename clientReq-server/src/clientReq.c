@@ -7,7 +7,7 @@
 #include <fcntl.h>
 
 #include "errExit.h"
-#include "request_response.h"
+#include "request_response_keymanager.h"
 
 char *pathToServerFIFO = "/tmp/serverFIFO";
 char *baseClientFIFO = "/tmp/clientFIFO.";
@@ -37,7 +37,7 @@ int main (int argc, char *argv[]) {
     struct Request request;
     request.processID = getpid();
     printf("Codice identificativo: ");
-    scanf("%s", request.id);
+    scanf("%s", request.identificativo);
     printf("Servizio: ");
     scanf("%s", request.servizio);
 
