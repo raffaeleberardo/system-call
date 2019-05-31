@@ -54,7 +54,10 @@ int main (int argc, char *argv[]) {
     if(read(clientFIFO, &response, sizeof(struct Response)) != sizeof(struct Response))
       errExit("read failed");
     printf("<Client %d>Lettura eseguita con successo...\n", getpid());
-    printf("Chiave rilasciata dal server: %i\n", response.key);
+    if (response.key == -1)
+      printf("<Client> Servizio non disponibile...\n");
+    else
+      printf("Chiave rilasciata dal server: %i\n", response.key);
     if (close(serverFIFO) != 0 || close(clientFIFO) != 0) {
       errExit("close failed");
     }

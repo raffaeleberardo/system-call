@@ -12,6 +12,7 @@
 
 #include "errExit.h"
 #include "request_response_keymanager.h"
+#include "shared_memory.h"
 
 char *pathToServerFIFO = "/tmp/serverFIFO";
 char *baseClientFIFO = "/tmp/clientFIFO.";
@@ -43,28 +44,25 @@ void quit(int sig){
   _exit(0);
 }
 
-int keyCreation(struct Request *request, struct Response *response){
+void keyCreation(struct Request *request, struct Response *response){
   if (strcmp(request->servizio, "stampa") == 0) {
     stampa += 2;
     response->key = stampa;
-    return 0;
   }
   else if (strcmp(request->servizio, "salva") == 0) {
     salva -= 2;
     response->key = salva;
-    return 0;
   }
   else if (strcmp(request->servizio, "invia") == 0) {
     invia += 2;
     response->key = invia;
-    return 0;
   }
-  else
-    return -1;
-
+  else{
+    response->key = -1;
+  }
 }
 
-void sendResponse(struct Request *request){
+void sendResponse(struct Request *request, struct Response *response){
   char pathToClientFIFO[25];
   sprintf(pathToClientFIFO, "%s%d", baseClientFIFO, request->processID);
   int clientFIFO = open(pathToClientFIFO, O_WRONLY);
@@ -73,10 +71,7 @@ void sendResponse(struct Request *request){
     return;
   }
 
-  struct Response response;
-  if(!keyCreation(request, &response))
-    printf("<Server> Errore creazione chiave!\n");
-  if (write(clientFIFO, &response, sizeof(struct Response)) != sizeof(struct Response))
+  if (write(clientFIFO, response, sizeof(struct Response)) != sizeof(struct Response))
     errExit("write failed");
   printf("<Server> scrittura chiave su clientFIFO eseguita...\n");
   if (close(clientFIFO) != 0)
@@ -89,15 +84,12 @@ int main (int argc, char *argv[]) {
     signalManager(); //blocca tutti segnali tranne SIGTERM
     printf("<Server> Tutti segnali bloccati tranne SIGTERM (int 15)\n\n");
     //Memoria condivisa che salva fino a 10 richieste
-    /*printf("<Server>Creazione segmento memoria condivisa\n");
-    int shmid = shmget(IPC_PRIVATE, sizeof(struct keyManager) * 10, IPC_CREAT | IPC_EXCL | S_IRUSR | S_IWUSR);
-    if (shmid == -1)
-      errExit("shmget failed");
-    //Attaching the shared memory in read/write mode
-    if (shmat(shmid, NULL, 0) == -1) {
-      printf("<Server> Errore attaccamento shared memory\n");
-      errExit("shmat failed");
-    }*/
+    int contatore = 0;
+    int n = 10;
+    size_t sizeMemory = sizeof(struct keyManager) * n;
+    int shmid = alloc_shared_memory(IPC_PRIVATE, sizeMemory);
+    //attach shared memory
+    struct keyManager *km = (struct keyManager *)get_shared_memory(shmid, S_IRUSR | S_IWUSR);
     //creazione serverFIFO
     if (mkfifo(pathToServerFIFO, S_IRUSR | S_IWUSR | S_IWGRP) == -1)
       errExit("mkfifo failed");
@@ -120,12 +112,28 @@ int main (int argc, char *argv[]) {
         printf("<Server>FIFO non funzionante...\n");
       else if(bR != sizeof(struct Request) || bR == 0)
         printf("<Server> Non ho ricevuto una richiesta valida...\n");
-      else
-        sendResponse(&request);
-      printf("<Server> Lettura Request eseguita con successo\nID: %i\nIdentificativo: %s\nServizio: %s\n", request.processID, request.identificativo, request.servizio);
-      int segnale;
-      printf("Digitare 15 per terminare, altro per tenere FIFO aperta...\nInserire numero: ");
-      scanf("%i", &segnale);
-      kill(getpid(), segnale);
+      else{
+        printf("<Server> Lettura Request eseguita con successo...\n");
+        struct Response response;
+        keyCreation(&request, &response);
+        if(response.key == -1)
+          printf("<Server> Servizio non disponibile...\n");
+        else{
+          strcpy((km+contatore)->identificativo, request.identificativo);
+          (km+contatore)->key = response.key;
+          (km+contatore)->timestamp = time(NULL);
+          contatore++;
+          if (contatore >= n)
+            contatore = 0;
+          //stampa shared_memory
+          printf("SHARED MEMORY\n");
+          for (int i = 0; i < n; i++) {
+            printf("%i) %s\n", i, (km+i)->identificativo);
+            printf("%i) %i\n", i, (km+i)->key);
+            printf("%i) %lu\n", i, (km+i)->timestamp);
+          }
+        }
+        sendResponse(&request, &response);
+      }
     } while(bR != -1);
 }
