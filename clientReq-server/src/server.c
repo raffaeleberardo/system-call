@@ -23,7 +23,7 @@ int serverFIFO, serverFIFO_extra;
 pid_t child;
 int stampa = 1;
 int salva = -2;
-int invia = 0;
+int invia = 2;
 
 //FUNZIONI
 void signalManager(void){
@@ -96,7 +96,7 @@ int main (int argc, char *argv[]) {
   //Memoria condivisa
   int contatore = 0;
   size_t sizeMemory = sizeof(struct keyManager) * MEMORY_SIZE;
-  int shmid = alloc_shared_memory(IPC_PRIVATE, sizeMemory);
+  int shmid = alloc_shared_memory(81298, sizeMemory);
   //attach shared memory
   struct keyManager *km = (struct keyManager *)get_shared_memory(shmid, S_IRUSR | S_IWUSR);
 
