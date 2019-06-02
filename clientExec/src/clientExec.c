@@ -63,10 +63,17 @@ int main (int argc, char *argv[]) {
     //richiesta servizio INVIA
     else if(key >= 2 && (key%2) == 0){
 
-    }
+    }*/
     //richiesta SALVA
     else{
-
-    }*/
+      char *argVec[argc-2];
+      for (int i = 0; i<argc-3; i++) {
+        argVec[i] = argv[i+3];
+      }
+      argVec[argc-3] = (char *)NULL;
+      if (execv("salva", argVec) == -1) {
+        errExit("execl failed");
+      }
+    }
     return 0;
 }
