@@ -1,4 +1,6 @@
 #define MEMORY_SIZE 10
+#define WAIT -1
+#define SIGNAL 1
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -7,10 +9,13 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <sys/sem.h>
 
 #include "errExit.h"
 #include "request_response_keymanager.h"
 #include "shared_memory.h"
+#include "semaphore.h"
+
 
 int main (int argc, char *argv[]) {
     printf("Hi, I'm ClientExec program!\n");
@@ -21,6 +26,7 @@ int main (int argc, char *argv[]) {
     size_t sizeMemory = sizeof(struct keyManager) * MEMORY_SIZE;
     int shmid = alloc_shared_memory(81298, sizeMemory);
     struct keyManager *km = (struct keyManager *)get_shared_memory(shmid, S_IRUSR | S_IWUSR);
+    int semid = semget(10, 1, S_IRUSR | S_IWUSR);
     printf("CLIENT EXEC\n");
     for (int i = 0; i < MEMORY_SIZE; i++) {
       printf("%i) %s\n", i+1, (km+i)->identificativo);
@@ -33,6 +39,8 @@ int main (int argc, char *argv[]) {
     int key = atoi(argv[2]);
     printf("identificativo: %s\nchiave: %i", identificativo, key);
     int found = 0;
+    semOp(semid, 0, WAIT);
+    printf("<ClientExec> Semaphore WAIT...\n");
     for (int i = 0; i < MEMORY_SIZE; i++) {
       printf("strcmp: %i\n", strcmp((km+i)->identificativo, identificativo));
       if ((strcmp((km+i)->identificativo, identificativo) == 0) && ((km+i)->key == key)) {
@@ -43,11 +51,14 @@ int main (int argc, char *argv[]) {
         break;
       }
     }
+    printf("<ClientExec> Semaphore SIGNAL...\n");
+    semOp(semid, 0, SIGNAL);
     printf("found: %i\n", found);
     if (!found){
       printf("<ClientExec> Richiesta non valida!\n");
       return 0;
     }
+
     //richiesta servizo STAMPA
     if (key >= 1 && (key%2)== 1) {
       char *argVec[argc-2];
@@ -59,11 +70,18 @@ int main (int argc, char *argv[]) {
         errExit("execl failed");
       }
     }
-    /*
+
     //richiesta servizio INVIA
     else if(key >= 2 && (key%2) == 0){
-
-    }*/
+      char *argVec[argc-2];
+      for (int i = 0; i<argc-3; i++) {
+        argVec[i] = argv[i+3];
+      }
+      argVec[argc-3] = (char *)NULL;
+      if (execv("invia", argVec) == -1) {
+        errExit("execl failed");
+      }
+    }
     //richiesta SALVA
     else{
       char *argVec[argc-2];

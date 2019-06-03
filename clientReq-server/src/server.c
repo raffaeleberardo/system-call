@@ -1,4 +1,6 @@
 #define MEMORY_SIZE 10
+#define WAIT -1
+#define SIGNAL 1
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,16 +13,24 @@
 #include <sys/shm.h>
 #include <time.h>
 #include <string.h>
+#include <sys/sem.h>
 
 #include "errExit.h"
 #include "request_response_keymanager.h"
 #include "shared_memory.h"
+#include "semaphore.h"
 
 char *pathToServerFIFO = "/tmp/serverFIFO";
 char *baseClientFIFO = "/tmp/clientFIFO.";
 
 int serverFIFO, serverFIFO_extra;
 pid_t child;
+
+int shmid;
+struct keyManager *km;
+
+int semid;
+
 int stampa = 1;
 int salva = -2;
 int invia = 2;
@@ -29,25 +39,33 @@ int invia = 2;
 void signalManager(void){
   sigset_t set;
   if(sigfillset(&set) == -1)
-    errExit("sigfillset failed");
+  errExit("sigfillset failed");
   if(sigdelset(&set, SIGTERM) == -1)
-    errExit("sidelset failed");
+  errExit("sidelset failed");
   if (sigprocmask(SIG_SETMASK, &set, NULL) == -1)
-    errExit("sigprocmask failed");
+  errExit("sigprocmask failed");
 }
 
 void quit(int sig){
   if (sig == SIGTERM){
     kill(child, SIGTERM);
+    free_shared_memory(km);
+    remove_shared_memory(shmid);
+    if (semctl(semid, 0/*ignored*/, IPC_RMID, 0/*ignored*/) == -1){
+      errExit("semctl failed");
+    }
+    else{
+      printf("semaphore set removed successfully\n");
+    }
     printf("<Server> Terminazione...\n");
   }
   if(serverFIFO != 0 && close(serverFIFO) == -1)
-    errExit("close failed");
+  errExit("close failed");
   if(serverFIFO_extra != 0 && close(serverFIFO_extra) == -1)
-    errExit("close failed");
+  errExit("close failed");
   if (child != 0) {
     if (unlink(pathToServerFIFO) != 0)
-      errExit("unlink failed");
+    errExit("unlink failed");
   }
   _exit(0);
 }
@@ -80,10 +98,10 @@ void sendResponse(struct Request *request, struct Response *response){
   }
 
   if (write(clientFIFO, response, sizeof(struct Response)) != sizeof(struct Response))
-    errExit("write failed");
+  errExit("write failed");
   printf("<Server> scrittura chiave su clientFIFO eseguita...\n");
   if (close(clientFIFO) != 0)
-    printf("close failed\n");
+  printf("close failed\n");
 }
 
 //MAIN
@@ -96,9 +114,33 @@ int main (int argc, char *argv[]) {
   //Memoria condivisa
   int contatore = 0;
   size_t sizeMemory = sizeof(struct keyManager) * MEMORY_SIZE;
-  int shmid = alloc_shared_memory(81298, sizeMemory);
+  shmid = alloc_shared_memory(81298, sizeMemory);
   //attach shared memory
-  struct keyManager *km = (struct keyManager *)get_shared_memory(shmid, S_IRUSR | S_IWUSR);
+  km = (struct keyManager *)get_shared_memory(shmid, S_IRUSR | S_IWUSR);
+
+  //SEMAFORO
+  semid = semget(10, 1, IPC_CREAT | S_IRUSR | S_IWUSR);
+  // Initialize the semaphore set
+  unsigned short semInitVal[] = {1};
+  union semun arg;
+  arg.array = semInitVal;
+  if (semctl(semid, 0 /*ignored*/, SETALL, arg) == -1){
+    errExit("semctl SETALL failed");
+  }
+
+  //creazione serverFIFO
+  if (mkfifo(pathToServerFIFO, S_IRUSR | S_IWUSR | S_IWGRP) == -1)
+  errExit("mkfifo failed");
+  printf("<Server> serverFIFO creata con successo...\n");
+  if (signal(SIGTERM, quit) == SIG_ERR)
+  errExit("signal failed");
+  serverFIFO = open(pathToServerFIFO, O_RDONLY);
+  //apertura FIFO server in sola scrittura così che non veda la fine del file...
+  if (serverFIFO == -1)
+  errExit("open failed");
+  serverFIFO_extra = open(pathToServerFIFO, O_WRONLY);
+  if (serverFIFO_extra == -1)
+  errExit("open failed");
 
   //PROCESSO FIGLIO CHE CONTROLLA SHARED MEMORY OGNI 30 SECONDI
   child = fork();
@@ -111,6 +153,8 @@ int main (int argc, char *argv[]) {
       printf("<KeyManager> Dormo...\n");
       sleep(30);
       printf("<KeyManager> Sveglio...\n");
+      semOp(semid, 0, WAIT);
+      printf("<KeyManager> Semaphore WAIT...\n");
       for (int i = 0; i < MEMORY_SIZE; i++) {
         if (strlen((km+i)->identificativo) != 0 && (km+i)->key != 0 && (km+i)->timestamp != 0) {
           if (difftime(time(NULL), (km+i)->timestamp) > 300) {
@@ -121,21 +165,11 @@ int main (int argc, char *argv[]) {
           }
         }
       }
+      printf("<KeyManager> Semaphore SIGNAL...\n");
+      semOp(semid, 0, SIGNAL);
     }
   }
-  //creazione serverFIFO
-  if (mkfifo(pathToServerFIFO, S_IRUSR | S_IWUSR | S_IWGRP) == -1)
-    errExit("mkfifo failed");
-  printf("<Server> serverFIFO creata con successo...\n");
-  if (signal(SIGTERM, quit) == SIG_ERR)
-    errExit("signal failed");
-  serverFIFO = open(pathToServerFIFO, O_RDONLY);
-  //apertura FIFO server in sola scrittura così che non veda la fine del file...
-  if (serverFIFO == -1)
-    errExit("open failed");
-  serverFIFO_extra = open(pathToServerFIFO, O_WRONLY);
-  if (serverFIFO_extra == -1)
-    errExit("open failed");
+
   struct Request request;
   ssize_t bR = -1;
   do {
@@ -154,12 +188,16 @@ int main (int argc, char *argv[]) {
       else{
         //INSERIMENTO VALORI IN SHARED MEMORY
         printf("<Server> Contatore: %i\n", contatore);
+        semOp(semid, 0, WAIT);
+        printf("<Server> Semaphore WAIT...\n");
         strcpy((km+contatore)->identificativo, request.identificativo);
         (km+contatore)->key = response.key;
         (km+contatore)->timestamp = time(NULL);
+        printf("<Server> Semaphore SIGNAL...\n");
+        semOp(semid, 0, SIGNAL);
         contatore++;
         if (contatore >= MEMORY_SIZE)
-          contatore = 0;
+        contatore = 0;
         //stampa shared_memory
         printf("SHARED MEMORY\n");
         for (int i = 0; i < MEMORY_SIZE; i++) {
@@ -171,6 +209,4 @@ int main (int argc, char *argv[]) {
       sendResponse(&request, &response);
     }
   } while(bR != -1);
-  free_shared_memory(km);
-  remove_shared_memory(shmid);
 }
