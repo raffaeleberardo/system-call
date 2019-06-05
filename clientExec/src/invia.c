@@ -34,34 +34,9 @@ int main (int argc, char *argv[]) {
   }
   strcat(m.buf, "\n");
   size_t mSize = sizeof(struct mymsg) - sizeof(long);
-  if (msgsnd(msqid, &m, mSize, IPC_NOWAIT) == -1) {
+  if (msgsnd(msqid, &m, mSize, 0) == -1) {
     errExit("msgsnd failed");
   }
   printf("Parametri in coda messaggi\n");
-  /*int stampa;
-  printf("STAMPARE? ");
-  scanf("%i", &stampa);
-  //verifica ricezione
-  if (stampa) {
-    struct mymsg rcv;
-    while (1) {
-      errno = 0;
-      if (msgrcv(msqid, &rcv, mSize, 1, IPC_NOWAIT) == -1) {
-        if (errno == ENOMSG) {
-          printf("Non ci sono messaggi!\n");
-        }
-        else{
-          errExit("msgrcv failed");
-        }
-      }
-      else{
-        printf("%s\n", rcv.buf);
-        if (msgctl(msqid, IPC_RMID, NULL) == -1)
-          errExit("msgctl failed");
-        else
-          printf("message queue removed successfully\n");
-      }
-    }
-  }*/
   return 0;
 }

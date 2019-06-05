@@ -4,7 +4,7 @@
 int main (int argc, char *argv[]) {
     printf("Hi, I'm Stampa program!\n");
     printf("argc: %i\n", argc);
-    if (argc <= 1) {
+    if (argc == 0) {
       printf("Nessun argomento da stampare\n");
       return 0;
     }

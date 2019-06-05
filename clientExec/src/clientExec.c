@@ -51,6 +51,7 @@ int main (int argc, char *argv[]) {
         break;
       }
     }
+    free_shared_memory(km);
     printf("<ClientExec> Semaphore SIGNAL...\n");
     semOp(semid, 0, SIGNAL);
     printf("found: %i\n", found);

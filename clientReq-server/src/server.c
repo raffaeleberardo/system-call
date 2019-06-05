@@ -24,7 +24,7 @@ char *pathToServerFIFO = "/tmp/serverFIFO";
 char *baseClientFIFO = "/tmp/clientFIFO.";
 
 int serverFIFO, serverFIFO_extra;
-pid_t child;
+pid_t child = -1;
 
 int shmid;
 struct keyManager *km;
@@ -47,25 +47,31 @@ void signalManager(void){
 }
 
 void quit(int sig){
-  if (sig == SIGTERM){
-    kill(child, SIGTERM);
-    free_shared_memory(km);
-    remove_shared_memory(shmid);
-    if (semctl(semid, 0/*ignored*/, IPC_RMID, 0/*ignored*/) == -1){
-      errExit("semctl failed");
-    }
-    else{
-      printf("semaphore set removed successfully\n");
-    }
-    printf("<Server> Terminazione...\n");
+  if (child == 0 && sig == SIGTERM) {
+    printf("<keyManager> Terminazione\n");
   }
-  if(serverFIFO != 0 && close(serverFIFO) == -1)
-  errExit("close failed");
-  if(serverFIFO_extra != 0 && close(serverFIFO_extra) == -1)
-  errExit("close failed");
-  if (child != 0) {
-    if (unlink(pathToServerFIFO) != 0)
-    errExit("unlink failed");
+  else{
+    if (sig == SIGTERM){
+      kill(child, SIGTERM);
+      free_shared_memory(km);
+      remove_shared_memory(shmid);
+      printf("<Server> Terminazione...\n");
+      if(serverFIFO != 0 && close(serverFIFO) == -1){
+        errExit("close failed");
+      }
+      if(serverFIFO_extra != 0 && close(serverFIFO_extra) == -1){
+        errExit("close failed");
+      }
+      if (semctl(semid, 0/*ignored*/, IPC_RMID, 0/*ignored*/) == -1){
+        errExit("semctl failed");
+      }
+      else{
+        printf("semaphore set removed successfully\n");
+      }
+      if (unlink(pathToServerFIFO) != 0){
+        errExit("unlink failed");
+      }
+    }
   }
   _exit(0);
 }
@@ -144,6 +150,9 @@ int main (int argc, char *argv[]) {
 
   //PROCESSO FIGLIO CHE CONTROLLA SHARED MEMORY OGNI 30 SECONDI
   child = fork();
+  if (child != 0) {
+    printf("pidof keyManager: %i\n", child);
+  }
   if (child == -1) {
     printf("<Server> keyManager rotto\n");
     errExit("fork failed");
